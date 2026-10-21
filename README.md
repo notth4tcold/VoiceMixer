@@ -27,11 +27,16 @@ efeitos, gravador, áudio pela rede (VBAN), MIDI e controle remoto.
 
 ## Instalar
 
-Baixe o arquivo da sua distro em [Releases](https://github.com/notth4tcold/VoiceMixer/releases):
+Baixe a última versão da sua distro em [Releases](https://github.com/notth4tcold/VoiceMixer/releases/latest):
 
 ```sh
-sudo apt install ./voicemixer_*_amd64.deb              # Ubuntu / Debian
-sudo pacman -U voicemixer-*-x86_64.pkg.tar.zst         # Arch
+# Ubuntu / Debian
+wget https://github.com/notth4tcold/VoiceMixer/releases/latest/download/voicemixer_amd64.deb
+sudo apt install ./voicemixer_amd64.deb
+
+# Arch
+wget https://github.com/notth4tcold/VoiceMixer/releases/latest/download/voicemixer-x86_64.pkg.tar.zst
+sudo pacman -U voicemixer-x86_64.pkg.tar.zst
 ```
 
 Ou use o `.tar.gz`, que funciona em qualquer distro x86_64 com PipeWire. No Arch, também dá

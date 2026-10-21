@@ -336,8 +336,10 @@ fn make_stream(
                         scratch.clear();
                         scratch.extend(
                             bytes
-                                .chunks_exact(4)
-                                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+                                .as_chunks::<4>()
+                                .0
+                                .iter()
+                                .map(|b| f32::from_le_bytes(*b)),
                         );
                         engine.borrow_mut().push_input(strip, &scratch, ch);
                     }
@@ -351,8 +353,8 @@ fn make_stream(
                         let frames = quantum.min(bytes.len() / stride);
                         scratch.resize(frames * ch, 0.0);
                         engine.borrow_mut().pull_output(bus, &mut scratch, ch);
-                        for (dst, v) in bytes.chunks_exact_mut(4).zip(&scratch) {
-                            dst.copy_from_slice(&v.to_le_bytes());
+                        for (dst, v) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(&scratch) {
+                            *dst = v.to_le_bytes();
                         }
                         frames
                     } else {

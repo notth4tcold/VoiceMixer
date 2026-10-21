@@ -34,14 +34,14 @@ jobs:
         run: |
           cargo install cargo-deb --locked
           mkdir -p dist
-          cargo deb -p voicemixer --no-build --no-strip --output dist/
+          cargo deb -p voicemixer --no-build --no-strip --output dist/voicemixer_amd64.deb
       - name: Tarball
         run: |
-          name="voicemixer-${GITHUB_REF_NAME}-linux-x86_64"
-          mkdir -p "dist/$name"
-          cp target/release/voicemixer README.md LICENSE packaging/voicemixer.desktop "dist/$name/"
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          rm -r "dist/$name"
+          # Version-less asset names keep .../releases/latest/download/<file> links stable.
+          mkdir -p dist/voicemixer
+          cp target/release/voicemixer README.md LICENSE packaging/voicemixer.desktop dist/voicemixer/
+          tar -C dist -czf dist/voicemixer-linux-x86_64.tar.gz voicemixer
+          rm -r dist/voicemixer
       - uses: actions/upload-artifact@v4
         with:
           name: ubuntu
@@ -66,7 +66,7 @@ jobs:
           chown -R builder /build
           cd /build && sudo -u builder makepkg --noconfirm
           mkdir -p "$GITHUB_WORKSPACE/dist"
-          cp /build/*.pkg.tar.zst "$GITHUB_WORKSPACE/dist/"
+          cp /build/voicemixer-*.pkg.tar.zst "$GITHUB_WORKSPACE/dist/voicemixer-x86_64.pkg.tar.zst"
       - uses: actions/upload-artifact@v4
         with:
           name: arch
@@ -89,17 +89,17 @@ jobs:
 
             **Ubuntu / Debian**
             ```sh
-            sudo apt install ./voicemixer_*_amd64.deb
+            sudo apt install ./voicemixer_amd64.deb
             ```
 
             **Arch Linux**
             ```sh
-            sudo pacman -U voicemixer-*-x86_64.pkg.tar.zst
+            sudo pacman -U voicemixer-x86_64.pkg.tar.zst
             ```
 
             **Any distribution** (x86_64)
             ```sh
-            tar xzf voicemixer-${{ github.ref_name }}-linux-x86_64.tar.gz
-            ./voicemixer-${{ github.ref_name }}-linux-x86_64/voicemixer
+            tar xzf voicemixer-linux-x86_64.tar.gz
+            ./voicemixer/voicemixer
             ```
           files: dist/*
