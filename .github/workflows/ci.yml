@@ -85,8 +85,7 @@ jobs:
           ver=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
           if ! bash -x packaging/arch/ci-build.sh "$ver" dist > pkg.log 2>&1; then
             cat pkg.log
-            msg=$(tail -n 40 pkg.log | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/
-/%0A/g')
+            msg=$(tail -n 40 pkg.log | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
             echo "::error title=arch package::$msg"
             exit 1
           fi
