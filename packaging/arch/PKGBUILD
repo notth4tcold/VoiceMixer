@@ -8,6 +8,7 @@ url="https://github.com/notth4tcold/VoiceMixer"
 license=('MIT')
 depends=('pipewire' 'alsa-lib' 'gcc-libs' 'glibc' 'libxkbcommon' 'libglvnd')
 makedepends=('cargo' 'clang' 'pkgconf')
+options=('!debug')
 optdepends=('lame: MP3 recording'
             'wayland: native Wayland window'
             'libx11: X11 window')

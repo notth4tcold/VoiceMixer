@@ -27,4 +27,4 @@ if [ "$status" -ne 0 ]; then
     echo "::error title=makepkg failed::$msg"
     exit "$status"
 fi
-cp /build/voicemixer-*.pkg.tar.zst "$out/voicemixer-x86_64.pkg.tar.zst"
+cp "/build/voicemixer-$ver-1-x86_64.pkg.tar.zst" "$out/voicemixer-x86_64.pkg.tar.zst"
