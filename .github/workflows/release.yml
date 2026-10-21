@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x86_64:
+    # Oldest supported runner, so the binary runs on distributions with an older glibc.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config clang libclang-dev \
+            libpipewire-0.3-dev libspa-0.2-dev libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --locked
+      - run: cargo build --release --locked -p voicemixer
+      - name: Package
+        run: |
+          name="voicemixer-${GITHUB_REF_NAME}-linux-x86_64"
+          mkdir -p "dist/$name"
+          cp target/release/voicemixer README.md packaging/voicemixer.desktop "dist/$name/"
+          strip "dist/$name/voicemixer"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            Linux x86_64 build. Requires PipeWire (default on current Ubuntu, Fedora, Arch, Debian 12+).
+
+            ```sh
+            tar xzf voicemixer-${{ github.ref_name }}-linux-x86_64.tar.gz
+            cd voicemixer-${{ github.ref_name }}-linux-x86_64
+            ./voicemixer
+            ```
+            To install: `install -Dm755 voicemixer ~/.local/bin/voicemixer` and
+            `install -Dm644 voicemixer.desktop ~/.local/share/applications/voicemixer.desktop`.
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
