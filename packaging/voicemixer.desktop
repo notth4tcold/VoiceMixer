@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=VoiceMixer
+GenericName=Virtual Audio Mixer
+Comment=Mix, route and process audio between devices and applications
+Exec=voicemixer
+Icon=audio-card
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+Keywords=mixer;audio;pipewire;virtual;voicemeeter;
+StartupWMClass=voicemixer

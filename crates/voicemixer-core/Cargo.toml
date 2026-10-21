@@ -1,0 +1,15 @@
+[package]
+name = "voicemixer-core"
+description = "Mixing engine, DSP, parameter model and protocols for VoiceMixer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1"
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+roxmltree = "0.20"
+rtrb = "0.3"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

@@ -1,0 +1,28 @@
+[package]
+name = "voicemixer"
+description = "Virtual audio mixer for Linux: 5 inputs, 5 outputs, routing, effects, recorder, VBAN, MIDI and remote control"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["midi"]
+midi = ["dep:midir"]
+
+[dependencies]
+voicemixer-core = { path = "../voicemixer-core" }
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+crossbeam-channel = "0.5"
+eframe = "0.29"
+env_logger = "0.11"
+hound = "3.5"
+log = "0.4"
+midir = { version = "0.10", optional = true }
+parking_lot = "0.12"
+rtrb = "0.3"
+symphonia = { version = "0.5", features = ["mp3", "aac", "isomp4", "alac"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libspa-sys = "0.8"
+pipewire = "0.8"
