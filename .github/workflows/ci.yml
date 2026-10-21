@@ -19,6 +19,12 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo build --workspace --locked
+      - name: Build
+        run: |
+          set -o pipefail
+          cargo build --workspace --locked --message-format=short 2>&1 | tee build.log
+      - name: Report build errors as annotations
+        if: failure()
+        run: grep -E "(error|warning)(\[E[0-9]+\])?:" build.log | head -40 | sed 's/^/::error::/'
       - run: cargo test --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
