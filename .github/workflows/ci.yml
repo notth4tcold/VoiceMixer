@@ -72,3 +72,15 @@ jobs:
             [ -n "$msg" ] && echo "::error title=${{ matrix.name }} $f::$msg"
           done
           true
+
+  arch-package:
+    name: arch package (makepkg)
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - run: pacman -Syu --noconfirm --needed git rust clang pkgconf pipewire alsa-lib libxkbcommon libglvnd
+      - uses: actions/checkout@v4
+      - name: makepkg
+        run: |
+          ver=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          packaging/arch/ci-build.sh "$ver" dist

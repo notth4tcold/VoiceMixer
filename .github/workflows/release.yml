@@ -56,18 +56,7 @@ jobs:
         run: pacman -Syu --noconfirm --needed git rust clang pkgconf pipewire alsa-lib libxkbcommon libglvnd
       - uses: actions/checkout@v4
       - name: Build package with makepkg
-        run: |
-          ver="${GITHUB_REF_NAME#v}"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          useradd -m builder
-          mkdir /build
-          cp packaging/arch/PKGBUILD /build/
-          git archive --prefix="VoiceMixer-$ver/" -o "/build/voicemixer-$ver.tar.gz" HEAD
-          sed -i "s/^pkgver=.*/pkgver=$ver/; s|^source=.*|source=(\"voicemixer-$ver.tar.gz\")|" /build/PKGBUILD
-          chown -R builder /build
-          cd /build && sudo -u builder makepkg --noconfirm
-          mkdir -p "$GITHUB_WORKSPACE/dist"
-          cp /build/voicemixer-*.pkg.tar.zst "$GITHUB_WORKSPACE/dist/voicemixer-x86_64.pkg.tar.zst"
+        run: packaging/arch/ci-build.sh "${GITHUB_REF_NAME#v}" "$GITHUB_WORKSPACE/dist"
       - uses: actions/upload-artifact@v4
         with:
           name: arch
