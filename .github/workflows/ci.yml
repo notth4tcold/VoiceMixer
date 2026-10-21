@@ -9,25 +9,57 @@ env:
 
 jobs:
   linux:
-    runs-on: ubuntu-24.04
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Newest Ubuntu: also runs fmt and clippy.
+          - name: ubuntu-24.04
+            runner: ubuntu-24.04
+            lint: true
+          # Oldest Ubuntu the release binaries are built on (older PipeWire).
+          - name: ubuntu-22.04
+            runner: ubuntu-22.04
+          # Rolling release with the newest PipeWire.
+          - name: arch
+            runner: ubuntu-24.04
+            container: archlinux:base-devel
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
     steps:
+      - name: System dependencies (Arch)
+        if: matrix.container
+        run: pacman -Syu --noconfirm --needed git rust clang pkgconf pipewire alsa-lib libxkbcommon libglvnd
       - uses: actions/checkout@v4
-      - name: System dependencies
+      - name: System dependencies (Ubuntu)
+        if: ${{ !matrix.container }}
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config clang libclang-dev \
             libpipewire-0.3-dev libspa-0.2-dev libasound2-dev
       - uses: dtolnay/rust-toolchain@stable
+        if: ${{ !matrix.container }}
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all --check
+        if: ${{ !matrix.container }}
+      - name: Versions
+        run: |
+          rustc --version
+          pkg-config --modversion libpipewire-0.3
+      - if: matrix.lint
+        run: cargo fmt --all --check
       - name: Build
         run: |
           set -o pipefail
           cargo build --workspace --locked --message-format=short 2>&1 | tee build.log
-      - run: cargo test --workspace --locked
+      - name: Test
+        run: |
+          set -o pipefail
+          cargo test --workspace --locked 2>&1 | tee test.log
       - name: Clippy
+        if: matrix.lint
         run: |
           set -o pipefail
           cargo clippy --workspace --all-targets --locked --message-format=short -- -D warnings 2>&1 | tee clippy.log
@@ -35,10 +67,11 @@ jobs:
       - name: Report errors as annotations
         if: failure()
         run: |
-          # One multi-line annotation (GitHub shows at most 10 per step).
-          for f in clippy.log build.log; do
+          # One multi-line annotation per log (GitHub shows at most 10 per step).
+          for f in build.log test.log clippy.log; do
             [ -f "$f" ] || continue
-            msg=$(grep -E -A3 '^(error|warning)|: (error|warning)' "$f" | grep -v '^\s*Compiling' | head -60 \
+            msg=$( { grep -E -A6 '^(error|warning)|: (error|warning)|panicked|FAILED' "$f" | grep -v '^\s*Compiling' | head -60; tail -n 12 "$f"; } \
               | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
-            [ -n "$msg" ] && echo "::error title=$f::$msg"
+            [ -n "$msg" ] && echo "::error title=${{ matrix.name }} $f::$msg"
           done
+          true
