@@ -322,7 +322,6 @@ fn make_stream(
             let Some(mut buffer) = stream.dequeue_buffer() else {
                 return;
             };
-            let requested = buffer.requested() as usize;
             let datas = buffer.datas_mut();
             let Some(data) = datas.first_mut() else {
                 return;
@@ -346,9 +345,10 @@ fn make_stream(
                 Port::Output(bus) => {
                     let stride = 4 * ch;
                     let n_frames = if let Some(bytes) = data.data() {
-                        let capacity = bytes.len() / stride;
-                        let want = if requested > 0 { requested } else { quantum };
-                        let frames = want.min(capacity);
+                        // pipewire-rs 0.8 does not expose pw_buffer.requested. Our
+                        // node.latency caps the graph quantum at `quantum`, so one
+                        // quantum per callback is always enough.
+                        let frames = quantum.min(bytes.len() / stride);
                         scratch.resize(frames * ch, 0.0);
                         engine.borrow_mut().pull_output(bus, &mut scratch, ch);
                         for (dst, v) in bytes.chunks_exact_mut(4).zip(&scratch) {
