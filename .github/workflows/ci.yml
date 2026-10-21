@@ -35,7 +35,10 @@ jobs:
       - name: Report errors as annotations
         if: failure()
         run: |
-          for f in build.log clippy.log; do
+          # One multi-line annotation (GitHub shows at most 10 per step).
+          for f in clippy.log build.log; do
             [ -f "$f" ] || continue
-            { grep -E '(error|warning)(\[[A-Za-z0-9_:]+\])?:' "$f" | head -30; tail -n 15 "$f"; } | sed 's/^/::error::/'
+            msg=$(grep -E -A3 '^(error|warning)|: (error|warning)' "$f" | grep -v '^\s*Compiling' | head -60 \
+              | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
+            [ -n "$msg" ] && echo "::error title=$f::$msg"
           done
