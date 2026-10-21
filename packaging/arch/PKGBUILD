@@ -1,0 +1,42 @@
+# Maintainer: notth4tcold <notth4tcold@gmail.com>
+pkgname=voicemixer
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Virtual audio mixing console for PipeWire: routing, effects, recorder, VBAN, MIDI"
+arch=('x86_64' 'aarch64')
+url="https://github.com/notth4tcold/VoiceMixer"
+license=('MIT')
+depends=('pipewire' 'alsa-lib' 'gcc-libs' 'glibc' 'libxkbcommon' 'libglvnd')
+makedepends=('cargo' 'clang' 'pkgconf')
+optdepends=('lame: MP3 recording'
+            'wayland: native Wayland window'
+            'libx11: X11 window')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "VoiceMixer-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "VoiceMixer-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release -p voicemixer
+}
+
+check() {
+  cd "VoiceMixer-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo test --frozen --workspace
+}
+
+package() {
+  cd "VoiceMixer-$pkgver"
+  install -Dm755 target/release/voicemixer "$pkgdir/usr/bin/voicemixer"
+  install -Dm644 packaging/voicemixer.desktop "$pkgdir/usr/share/applications/voicemixer.desktop"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

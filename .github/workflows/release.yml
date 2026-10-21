@@ -7,12 +7,19 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: never
+
 jobs:
-  linux-x86_64:
-    # Oldest supported runner, so the binary runs on distributions with an older glibc.
+  ubuntu:
+    # Oldest supported runner, so the binaries run on distributions with an older glibc.
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      - name: Tag matches crate version
+        run: |
+          crate=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          test "v$crate" = "$GITHUB_REF_NAME" || { echo "::error::tag $GITHUB_REF_NAME but Cargo.toml says $crate"; exit 1; }
       - name: System dependencies
         run: |
           sudo apt-get update
@@ -22,27 +29,77 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --locked
       - run: cargo build --release --locked -p voicemixer
-      - name: Package
+      - run: strip target/release/voicemixer
+      - name: Debian package
+        run: |
+          cargo install cargo-deb --locked
+          mkdir -p dist
+          cargo deb -p voicemixer --no-build --no-strip --output dist/
+      - name: Tarball
         run: |
           name="voicemixer-${GITHUB_REF_NAME}-linux-x86_64"
           mkdir -p "dist/$name"
-          cp target/release/voicemixer README.md packaging/voicemixer.desktop "dist/$name/"
-          strip "dist/$name/voicemixer"
+          cp target/release/voicemixer README.md LICENSE packaging/voicemixer.desktop "dist/$name/"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
-          (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+          rm -r "dist/$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu
+          path: dist/*
+
+  arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - name: Dependencies
+        run: pacman -Syu --noconfirm --needed git rust clang pkgconf pipewire alsa-lib libxkbcommon libglvnd
+      - uses: actions/checkout@v4
+      - name: Build package with makepkg
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          useradd -m builder
+          mkdir /build
+          cp packaging/arch/PKGBUILD /build/
+          git archive --prefix="VoiceMixer-$ver/" -o "/build/voicemixer-$ver.tar.gz" HEAD
+          sed -i "s/^pkgver=.*/pkgver=$ver/; s|^source=.*|source=(\"voicemixer-$ver.tar.gz\")|" /build/PKGBUILD
+          chown -R builder /build
+          cd /build && sudo -u builder makepkg --noconfirm
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp /build/*.pkg.tar.zst "$GITHUB_WORKSPACE/dist/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch
+          path: dist/*
+
+  publish:
+    needs: [ubuntu, arch]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum * > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           body: |
-            Linux x86_64 build. Requires PipeWire (default on current Ubuntu, Fedora, Arch, Debian 12+).
+            Requires PipeWire (default on current Ubuntu, Fedora, Arch and Debian 12+).
 
+            **Ubuntu / Debian**
+            ```sh
+            sudo apt install ./voicemixer_*_amd64.deb
+            ```
+
+            **Arch Linux**
+            ```sh
+            sudo pacman -U voicemixer-*-x86_64.pkg.tar.zst
+            ```
+
+            **Any distribution** (x86_64)
             ```sh
             tar xzf voicemixer-${{ github.ref_name }}-linux-x86_64.tar.gz
-            cd voicemixer-${{ github.ref_name }}-linux-x86_64
-            ./voicemixer
+            ./voicemixer-${{ github.ref_name }}-linux-x86_64/voicemixer
             ```
-            To install: `install -Dm755 voicemixer ~/.local/bin/voicemixer` and
-            `install -Dm644 voicemixer.desktop ~/.local/share/applications/voicemixer.desktop`.
-          files: |
-            dist/*.tar.gz
-            dist/*.sha256
+          files: dist/*

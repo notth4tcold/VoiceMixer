@@ -26,10 +26,16 @@ jobs:
         run: |
           set -o pipefail
           cargo build --workspace --locked --message-format=short 2>&1 | tee build.log
+      - run: cargo test --workspace --locked
+      - name: Clippy
+        run: |
+          set -o pipefail
+          cargo clippy --workspace --all-targets --locked --message-format=short -- -D warnings 2>&1 | tee clippy.log
       # Build logs need repository admin rights to download; annotations are public.
-      - name: Report build errors as annotations
+      - name: Report errors as annotations
         if: failure()
         run: |
-          { grep -E '(error|warning)(\[E[0-9]+\])?:' build.log | head -30; tail -n 25 build.log; } | sed 's/^/::error::/'
-      - run: cargo test --workspace --locked
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+          for f in build.log clippy.log; do
+            [ -f "$f" ] || continue
+            { grep -E '(error|warning)(\[[A-Za-z0-9_:]+\])?:' "$f" | head -30; tail -n 15 "$f"; } | sed 's/^/::error::/'
+          done

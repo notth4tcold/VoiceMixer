@@ -25,6 +25,18 @@ efeitos, gravador, áudio pela rede (VBAN), MIDI e controle remoto.
 | Controle | `voicemixer ctl`, botões de macro, MIDI e VBAN-TEXT, todos com a mesma sintaxe |
 | Configuração | Salva sozinha em `~/.config/voicemixer/settings.toml`; presets; importa o XML do Voicemeeter Banana |
 
+## Instalar
+
+Baixe o arquivo da sua distro em [Releases](https://github.com/notth4tcold/VoiceMixer/releases):
+
+```sh
+sudo apt install ./voicemixer_*_amd64.deb              # Ubuntu / Debian
+sudo pacman -U voicemixer-*-x86_64.pkg.tar.zst         # Arch
+```
+
+Ou use o `.tar.gz`, que funciona em qualquer distro x86_64 com PipeWire. No Arch, também dá
+para compilar do código-fonte com o `packaging/arch/PKGBUILD` (`makepkg -si`).
+
 ## Compilar no Linux
 
 Dependências de sistema:

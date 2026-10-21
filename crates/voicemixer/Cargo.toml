@@ -5,6 +5,26 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[package.metadata.deb]
+maintainer = "notth4tcold <notth4tcold@gmail.com>"
+copyright = "2026, notth4tcold"
+license-file = ["../../LICENSE", "0"]
+section = "sound"
+priority = "optional"
+depends = "$auto, pipewire"
+recommends = "wireplumber"
+suggests = "lame"
+extended-description = """\
+Virtual mixing console for Linux and PipeWire: three hardware and two virtual \
+inputs, three hardware and two virtual outputs, per-strip compressor, gate, EQ \
+and limiter, parametric bus EQ, tape recorder, VBAN network audio, MIDI and \
+remote control."""
+assets = [
+    ["target/release/voicemixer", "usr/bin/", "755"],
+    ["../../packaging/voicemixer.desktop", "usr/share/applications/", "644"],
+    ["../../README.md", "usr/share/doc/voicemixer/README.md", "644"],
+]
+
 [features]
 default = ["midi"]
 midi = ["dep:midir"]
