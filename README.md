@@ -39,7 +39,8 @@ wget https://github.com/notth4tcold/VoiceMixer/releases/latest/download/voicemix
 sudo pacman -U voicemixer-x86_64.pkg.tar.zst
 ```
 
-Ou use o `.tar.gz`, que funciona em qualquer distro x86_64 com PipeWire. No Arch, também dá
+O `.deb` e o `.tar.gz` precisam de Ubuntu 24.04 / Debian 13 ou mais novo (PipeWire 1.0+).
+O `.tar.gz` funciona em qualquer distro x86_64 recente com PipeWire. No Arch, também dá
 para compilar do código-fonte com o `packaging/arch/PKGBUILD` (`makepkg -si`).
 
 ## Compilar no Linux

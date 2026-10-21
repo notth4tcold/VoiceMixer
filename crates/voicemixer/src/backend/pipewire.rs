@@ -15,10 +15,10 @@
 use super::BackendHandle;
 use parking_lot::Mutex;
 use pipewire as pw;
-use pw::properties::Properties;
+use pw::properties::PropertiesBox;
 use pw::spa::pod::Pod;
 use pw::spa::utils::Direction;
-use pw::stream::{Stream, StreamFlags, StreamListener};
+use pw::stream::{StreamFlags, StreamListener, StreamRc};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -37,10 +37,10 @@ enum Port {
     Output(usize),
 }
 
-type StreamPair = (Stream, StreamListener<()>);
+type StreamPair = (StreamRc, StreamListener<()>);
 
 struct State {
-    core: pw::core::Core,
+    core: pw::core::CoreRc,
     engine: Rc<RefCell<Engine>>,
     shared: Arc<Shared>,
     rate: u32,
@@ -83,10 +83,10 @@ fn run(
     ready: &std::sync::mpsc::Sender<Result<(), String>>,
 ) -> Result<(), pw::Error> {
     pw::init();
-    let mainloop = pw::main_loop::MainLoop::new(None)?;
-    let context = pw::context::Context::new(&mainloop)?;
-    let core = context.connect(None)?;
-    let registry = core.get_registry()?;
+    let mainloop = pw::main_loop::MainLoopRc::new(None)?;
+    let context = pw::context::ContextRc::new(&mainloop, None)?;
+    let core = context.connect_rc(None)?;
+    let registry = core.get_registry_rc()?;
 
     let (rate, quantum) = {
         let p = shared.params.lock();
@@ -284,8 +284,8 @@ fn build_hw_streams(st: &State) -> Vec<StreamPair> {
     v
 }
 
-fn base_props(node: &str, description: &str, channels: u32) -> Properties {
-    let mut props = Properties::new();
+fn base_props(node: &str, description: &str, channels: u32) -> PropertiesBox {
+    let mut props = PropertiesBox::new();
     props.insert("media.type", "Audio");
     props.insert("node.name", node);
     props.insert("node.description", description);
@@ -304,14 +304,14 @@ fn base_props(node: &str, description: &str, channels: u32) -> Properties {
 fn make_stream(
     st: &State,
     name: &str,
-    mut props: Properties,
+    mut props: PropertiesBox,
     port: Port,
     channels: u32,
     autoconnect: bool,
 ) -> Result<StreamPair, pw::Error> {
     props.insert("node.latency", format!("{}/{}", st.quantum, st.rate));
     props.insert("node.rate", format!("1/{}", st.rate));
-    let stream = Stream::new(&st.core, name, props)?;
+    let stream = StreamRc::new(st.core.clone(), name, props)?;
     let engine = st.engine.clone();
     let ch = channels as usize;
     let quantum = st.quantum as usize;
@@ -322,6 +322,7 @@ fn make_stream(
             let Some(mut buffer) = stream.dequeue_buffer() else {
                 return;
             };
+            let requested = buffer.requested() as usize;
             let datas = buffer.datas_mut();
             let Some(data) = datas.first_mut() else {
                 return;
@@ -347,10 +348,9 @@ fn make_stream(
                 Port::Output(bus) => {
                     let stride = 4 * ch;
                     let n_frames = if let Some(bytes) = data.data() {
-                        // pipewire-rs 0.8 does not expose pw_buffer.requested. Our
-                        // node.latency caps the graph quantum at `quantum`, so one
-                        // quantum per callback is always enough.
-                        let frames = quantum.min(bytes.len() / stride);
+                        // `requested` is 0 when the driver does not say; fall back to our quantum.
+                        let want = if requested > 0 { requested } else { quantum };
+                        let frames = want.min(bytes.len() / stride);
                         scratch.resize(frames * ch, 0.0);
                         engine.borrow_mut().pull_output(bus, &mut scratch, ch);
                         for (dst, v) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(&scratch) {

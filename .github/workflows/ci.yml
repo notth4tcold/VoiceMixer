@@ -18,9 +18,6 @@ jobs:
           - name: ubuntu-24.04
             runner: ubuntu-24.04
             lint: true
-          # Oldest Ubuntu the release binaries are built on (older PipeWire).
-          - name: ubuntu-22.04
-            runner: ubuntu-22.04
           # Rolling release with the newest PipeWire.
           - name: arch
             runner: ubuntu-24.04

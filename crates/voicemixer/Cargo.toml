@@ -44,5 +44,5 @@ rtrb = "0.3"
 symphonia = { version = "0.5", features = ["mp3", "aac", "isomp4", "alac"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-libspa-sys = "0.8"
-pipewire = "0.8"
+libspa-sys = "0.10"
+pipewire = "0.10"

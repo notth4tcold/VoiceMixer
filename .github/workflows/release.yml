@@ -12,8 +12,9 @@ env:
 
 jobs:
   ubuntu:
-    # Oldest supported runner, so the binaries run on distributions with an older glibc.
-    runs-on: ubuntu-22.04
+    # Oldest Ubuntu whose PipeWire (1.0) the pipewire crate builds against; the
+    # binaries therefore need Ubuntu 24.04 / Debian 13 or newer.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Tag matches crate version
