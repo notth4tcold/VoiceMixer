@@ -11,7 +11,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::sync::atomic::Ordering;
-use voicemixer_core::{dsp, Controller, MAX_CHANNELS, NUM_BUSES, NUM_STRIPS};
+use voicemixer_core::{dsp, Controller, NUM_BUSES, NUM_STRIPS};
 
 #[cfg(unix)]
 pub fn socket_path() -> std::path::PathBuf {
@@ -96,22 +96,17 @@ fn answer(ctl: &Controller, line: &str) -> String {
         };
     }
     if line.eq_ignore_ascii_case("levels") {
-        // Reads the peaks without resetting them, so the GUI meters are unaffected.
+        // Reads the decaying display peaks (see `shared::Meters::tick`, run
+        // by a background thread regardless of whether a GUI is attached),
+        // so this falls back towards silence over time in `--headless` mode
+        // too, instead of latching at the loudest peak ever seen.
         let m = &ctl.shared.meters;
-        let read =
-            |slot: &std::sync::atomic::AtomicU32| f32::from_bits(slot.load(Ordering::Relaxed));
         let mut out = Vec::new();
         for s in 0..NUM_STRIPS {
-            out.push(format!(
-                "{:.1}",
-                dsp::lin_to_db(read(&m.strips[s][0]).max(read(&m.strips[s][1])))
-            ));
+            out.push(format!("{:.1}", dsp::lin_to_db(m.strip_level(s))));
         }
         for b in 0..NUM_BUSES {
-            let peak = (0..MAX_CHANNELS)
-                .map(|c| read(&m.buses[b][c]))
-                .fold(0.0, f32::max);
-            out.push(format!("{:.1}", dsp::lin_to_db(peak)));
+            out.push(format!("{:.1}", dsp::lin_to_db(m.bus_level(b))));
         }
         return format!("OK {}", out.join(" "));
     }

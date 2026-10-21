@@ -3,13 +3,27 @@
 use crate::params::{MixerParams, MAX_CHANNELS, NUM_BUSES, NUM_STRIPS};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::time::Duration;
 
-/// Peak levels written by the engine and drained by the GUI. Values are
-/// non-negative `f32` bit patterns, so `fetch_max` on the bits is a float max.
+/// How often [`Meters::tick`] drains the per-block peaks into the decaying
+/// display values. One ticker thread runs this (see `main.rs`), whether or
+/// not a GUI is attached, so meters behave the same in `--headless` mode.
+pub const METER_TICK: Duration = Duration::from_millis(33);
+/// Per-tick falloff applied to the displayed peak (tuned for `METER_TICK`).
+const METER_DECAY: f32 = 0.82;
+
+/// Peak levels written by the engine every audio block, plus the decaying
+/// values actually shown to the user. `strips`/`buses`/`tape` only ever grow
+/// (via `fetch_max`) until [`Meters::tick`] drains them; `*_display` holds
+/// the ballistics-decayed value that the GUI and `voicemixer ctl levels`
+/// both just read, so the two never fight over who gets to reset a peak.
 pub struct Meters {
     pub strips: [[AtomicU32; MAX_CHANNELS]; NUM_STRIPS],
     pub buses: [[AtomicU32; MAX_CHANNELS]; NUM_BUSES],
     pub tape: [AtomicU32; 2],
+    strips_display: [[AtomicU32; MAX_CHANNELS]; NUM_STRIPS],
+    buses_display: [[AtomicU32; MAX_CHANNELS]; NUM_BUSES],
+    tape_display: [AtomicU32; 2],
     /// Compressor gain reduction per strip (dB, stored negated).
     pub comp_gr: [AtomicU32; NUM_STRIPS],
     pub gate_open: [AtomicBool; NUM_STRIPS],
@@ -21,6 +35,9 @@ impl Default for Meters {
             strips: std::array::from_fn(|_| std::array::from_fn(|_| AtomicU32::new(0))),
             buses: std::array::from_fn(|_| std::array::from_fn(|_| AtomicU32::new(0))),
             tape: std::array::from_fn(|_| AtomicU32::new(0)),
+            strips_display: std::array::from_fn(|_| std::array::from_fn(|_| AtomicU32::new(0))),
+            buses_display: std::array::from_fn(|_| std::array::from_fn(|_| AtomicU32::new(0))),
+            tape_display: std::array::from_fn(|_| AtomicU32::new(0)),
             comp_gr: std::array::from_fn(|_| AtomicU32::new(0)),
             gate_open: std::array::from_fn(|_| AtomicBool::new(false)),
         }
@@ -36,6 +53,69 @@ impl Meters {
     /// Reads and resets the peak collected since the last call.
     pub fn take(slot: &AtomicU32) -> f32 {
         f32::from_bits(slot.swap(0, Ordering::Relaxed))
+    }
+
+    /// Reads a decaying display value without resetting it; any number of
+    /// readers (the GUI, `voicemixer ctl levels`) can call this at once.
+    #[inline]
+    fn load(slot: &AtomicU32) -> f32 {
+        f32::from_bits(slot.load(Ordering::Relaxed))
+    }
+
+    fn decay_one(accum: &AtomicU32, display: &AtomicU32) {
+        let peak = Self::take(accum);
+        let prev = Self::load(display);
+        display.store(peak.max(prev * METER_DECAY).to_bits(), Ordering::Relaxed);
+    }
+
+    /// Drains the peaks accumulated since the last tick into the decaying
+    /// display values, applying meter ballistics once centrally. Call this
+    /// every [`METER_TICK`] from a single thread (started in `main.rs` for
+    /// both the GUI and `--headless` modes) so meters fall back to silence
+    /// over time instead of latching at their all-time peak.
+    pub fn tick(&self) {
+        for s in 0..NUM_STRIPS {
+            for c in 0..MAX_CHANNELS {
+                Self::decay_one(&self.strips[s][c], &self.strips_display[s][c]);
+            }
+        }
+        for b in 0..NUM_BUSES {
+            for c in 0..MAX_CHANNELS {
+                Self::decay_one(&self.buses[b][c], &self.buses_display[b][c]);
+            }
+        }
+        for c in 0..2 {
+            Self::decay_one(&self.tape[c], &self.tape_display[c]);
+        }
+    }
+
+    /// Current displayed peak for a strip (both channels combined).
+    pub fn strip_level(&self, strip: usize) -> f32 {
+        self.strips_display[strip]
+            .iter()
+            .fold(0.0, |m, s| m.max(Self::load(s)))
+    }
+
+    /// Current displayed peak for a bus (all channels combined).
+    pub fn bus_level(&self, bus: usize) -> f32 {
+        self.buses_display[bus]
+            .iter()
+            .fold(0.0, |m, s| m.max(Self::load(s)))
+    }
+
+    /// Current displayed peak for a strip, per channel (for GUI meters).
+    pub fn strip_channel(&self, strip: usize, channel: usize) -> f32 {
+        Self::load(&self.strips_display[strip][channel])
+    }
+
+    /// Current displayed peak for a bus, per channel (for GUI meters).
+    pub fn bus_channel(&self, bus: usize, channel: usize) -> f32 {
+        Self::load(&self.buses_display[bus][channel])
+    }
+
+    /// Current displayed peak for a tape channel.
+    pub fn tape_channel(&self, channel: usize) -> f32 {
+        Self::load(&self.tape_display[channel])
     }
 }
 

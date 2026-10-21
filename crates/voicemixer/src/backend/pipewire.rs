@@ -174,11 +174,50 @@ fn run(
         }
     });
 
+    // Every bus has its own output FIFO, filled a block at a time whenever
+    // *any* stream pulls from it (see `Engine::pull_output`), so normally
+    // one playback device or one app recording from B1/B2 is enough to
+    // drive the whole engine. But the recorder and outgoing VBAN streams
+    // consume audio from inside that same block-processing step without
+    // being PipeWire streams themselves: with nothing else connected (no
+    // hardware output picked, nobody listening to B1/B2), nothing ever
+    // calls `pull_output`, the engine never advances, and `Recorder.Record`
+    // silently produces an empty file. This timer keeps the engine moving
+    // in real time whenever that would otherwise happen, without taking
+    // frames away from a real stream: `Engine::run` only produces audio
+    // into the bus FIFOs, it never pops from them like `pull_output` does.
+    let keepalive_engine = state.borrow().engine.clone();
+    let keepalive_shared = shared.clone();
+    let keepalive_frames = quantum as usize;
+    let keepalive_period = std::time::Duration::from_secs_f64(quantum as f64 / rate as f64);
+    let keepalive_timer = mainloop.loop_().add_timer(move |_expirations| {
+        if engine_needs_driving(&keepalive_shared) {
+            keepalive_engine.borrow_mut().run(keepalive_frames);
+        }
+    });
+    keepalive_timer
+        .update_timer(Some(keepalive_period), Some(keepalive_period))
+        .into_result()?;
+
     *shared.status.backend.lock() = "PipeWire".into();
     shared.status.running.store(true, Ordering::Relaxed);
     let _ = ready.send(Ok(()));
     mainloop.run();
     Ok(())
+}
+
+/// Whether something needs the engine to keep processing blocks even though
+/// no PipeWire stream is currently pulling audio from any bus: an active
+/// recording, or an enabled outgoing VBAN stream (both read from inside
+/// `Engine::run` rather than through a `pull_output` call of their own).
+fn engine_needs_driving(shared: &Shared) -> bool {
+    if shared.tape.recording.load(Ordering::Relaxed) {
+        return true;
+    }
+    shared
+        .params
+        .try_lock()
+        .is_some_and(|p| p.vban.enabled && p.vban.outgoing.iter().any(|o| o.enabled))
 }
 
 fn publish_devices(nodes: &HashMap<u32, (bool, DeviceInfo)>, shared: &Shared) {

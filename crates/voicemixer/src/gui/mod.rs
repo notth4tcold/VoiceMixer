@@ -9,7 +9,6 @@ use eframe::egui::{self, Color32, RichText};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use voicemixer_core::shared::Meters;
 use voicemixer_core::*;
 use widgets::color;
 
@@ -40,23 +39,26 @@ struct MeterState {
 }
 
 impl MeterState {
+    /// Pulls the current decaying display values. The actual ballistics run
+    /// centrally (see `shared::Meters::tick`, driven by a background thread
+    /// started in `main.rs`), so this is a plain read: any number of GUI
+    /// frames or `ctl levels` calls can look at the same values without
+    /// stepping on each other or needing the GUI to be open at all.
     fn update(&mut self, m: &shared::Meters) {
-        const DECAY: f32 = 0.82;
-        let fall = |disp: &mut f32, slot| *disp = Meters::take(slot).max(*disp * DECAY);
         for s in 0..NUM_STRIPS {
             for c in 0..MAX_CHANNELS {
-                fall(&mut self.strips[s][c], &m.strips[s][c]);
+                self.strips[s][c] = m.strip_channel(s, c);
             }
             self.comp_gr[s] = f32::from_bits(m.comp_gr[s].load(Ordering::Relaxed));
             self.gate_open[s] = m.gate_open[s].load(Ordering::Relaxed);
         }
         for b in 0..NUM_BUSES {
             for c in 0..MAX_CHANNELS {
-                fall(&mut self.buses[b][c], &m.buses[b][c]);
+                self.buses[b][c] = m.bus_channel(b, c);
             }
         }
         for c in 0..2 {
-            fall(&mut self.tape[c], &m.tape[c]);
+            self.tape[c] = m.tape_channel(c);
         }
     }
 }

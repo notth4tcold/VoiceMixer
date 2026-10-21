@@ -35,7 +35,15 @@ ENVIRONMENT:
 ";
 
 fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // "info" for our own crates only: left at the env_logger default, the
+    // GUI's D-Bus and Wayland dependencies log multi-kilobyte "info" lines
+    // per frame (full struct dumps), drowning out anything useful. RUST_LOG
+    // still overrides this entirely, so `RUST_LOG=debug` keeps working as
+    // documented below.
+    env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("warn,voicemixer=info,voicemixer_core=info"),
+    )
+    .init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("ctl") {
         return remote::client(&args[1..]);
@@ -110,6 +118,23 @@ fn run(params: MixerParams, config_path: PathBuf, headless: bool) -> anyhow::Res
         std::thread::Builder::new()
             .name("autosave".into())
             .spawn(move || autosave(shared, path))?;
+    }
+    {
+        // Meters only ever accumulate (`fetch_max`) as the engine writes
+        // them; something has to drain and decay them on a clock, or a
+        // peak latches forever instead of falling back to silence. The GUI
+        // used to be the only thing doing that, so `voicemixer ctl levels`
+        // in `--headless` mode (no GUI ever running) showed the loudest
+        // peak since start-up, never moving. Run it here instead, for both
+        // modes, so the GUI and the remote socket just read an already
+        // up-to-date value.
+        let shared = shared.clone();
+        std::thread::Builder::new()
+            .name("meters".into())
+            .spawn(move || loop {
+                std::thread::sleep(shared::METER_TICK);
+                shared.meters.tick();
+            })?;
     }
 
     if headless {
