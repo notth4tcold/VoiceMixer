@@ -45,4 +45,5 @@ symphonia = { version = "0.5", features = ["mp3", "aac", "isomp4", "alac"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libspa-sys = "0.10"
-pipewire = "0.10"
+# v0_3_49 enables Buffer::requested; PipeWire 1.0+ is required anyway.
+pipewire = { version = "0.10", features = ["v0_3_49"] }
