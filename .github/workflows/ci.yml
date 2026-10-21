@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: never
+
 jobs:
   linux:
     runs-on: ubuntu-24.04
@@ -22,12 +25,11 @@ jobs:
       - name: Build
         run: |
           set -o pipefail
-          export CARGO_TERM_COLOR=never
           cargo build --workspace --locked --message-format=short 2>&1 | tee build.log
+      # Build logs need repository admin rights to download; annotations are public.
       - name: Report build errors as annotations
         if: failure()
         run: |
-          sed 's/\[[0-9;]*m//g' build.log > clean.log
-          { grep -E "(error|warning)(\[E[0-9]+\])?:" clean.log | head -30; tail -n 25 clean.log; } | sed 's/^/::error::/'
+          { grep -E '(error|warning)(\[E[0-9]+\])?:' build.log | head -30; tail -n 25 build.log; } | sed 's/^/::error::/'
       - run: cargo test --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
