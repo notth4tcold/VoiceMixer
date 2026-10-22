@@ -120,9 +120,15 @@ impl ksni::Tray for Tray {
         "VoiceMixer".into()
     }
 
-    fn icon_name(&self) -> String {
-        // Same as the .desktop file.
-        "audio-card".into()
+    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
+        // A pixmap rather than an icon name, so it also shows when running
+        // from the tarball with nothing installed in the icon theme.
+        let icon = crate::app_icon();
+        let mut data = icon.rgba;
+        for px in data.chunks_exact_mut(4) {
+            px.rotate_right(1); // RGBA -> ARGB
+        }
+        vec![ksni::Icon { width: icon.width as i32, height: icon.height as i32, data }]
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {

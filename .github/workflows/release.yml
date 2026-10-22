@@ -40,7 +40,7 @@ jobs:
         run: |
           # Version-less asset names keep .../releases/latest/download/<file> links stable.
           mkdir -p dist/voicemixer
-          cp target/release/voicemixer README.md LICENSE packaging/voicemixer.desktop dist/voicemixer/
+          cp target/release/voicemixer README.md LICENSE packaging/voicemixer.desktop packaging/icons/voicemixer.png dist/voicemixer/
           tar -C dist -czf dist/voicemixer-linux-x86_64.tar.gz voicemixer
           rm -r dist/voicemixer
       - uses: actions/upload-artifact@v4

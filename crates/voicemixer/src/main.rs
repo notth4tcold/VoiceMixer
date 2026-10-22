@@ -16,6 +16,14 @@ use std::sync::Arc;
 use std::time::Duration;
 use voicemixer_core::*;
 
+/// Window and tray icon; packaging installs the same image as `voicemixer`
+/// in the icon theme for the .desktop file.
+const ICON_PNG: &[u8] = include_bytes!("../../../packaging/icons/voicemixer.png");
+
+fn app_icon() -> eframe::egui::IconData {
+    eframe::icon_data::from_png_bytes(ICON_PNG).expect("embedded icon is a valid PNG")
+}
+
 const HELP: &str = "\
 VoiceMixer - virtual audio mixing console
 

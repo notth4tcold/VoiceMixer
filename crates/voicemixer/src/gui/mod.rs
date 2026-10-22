@@ -38,6 +38,7 @@ impl Gui {
             viewport: egui::ViewportBuilder::default()
                 .with_title("VoiceMixer")
                 .with_app_id("voicemixer")
+                .with_icon(crate::app_icon())
                 .with_inner_size([1240.0, 690.0])
                 .with_min_inner_size([1040.0, 600.0]),
             ..Default::default()

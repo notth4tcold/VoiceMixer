@@ -66,7 +66,8 @@ cargo build --release
 Sem MIDI (dispensa a `libasound2-dev`): `cargo build --release --no-default-features`.
 
 Para instalar: `install -Dm755 target/release/voicemixer ~/.local/bin/voicemixer`
-e `install -Dm644 packaging/voicemixer.desktop ~/.local/share/applications/voicemixer.desktop`.
+e `install -Dm644 packaging/voicemixer.desktop ~/.local/share/applications/voicemixer.desktop`
+e `install -Dm644 packaging/icons/voicemixer.svg ~/.local/share/icons/hicolor/scalable/apps/voicemixer.svg`.
 
 ## Primeiros passos
 
