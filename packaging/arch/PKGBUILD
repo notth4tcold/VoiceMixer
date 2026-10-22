@@ -1,6 +1,6 @@
 # Maintainer: notth4tcold <notth4tcold@gmail.com>
 pkgname=voicemixer
-pkgver=0.1.1
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Virtual audio mixing console for PipeWire: routing, effects, recorder, VBAN, MIDI"
 arch=('x86_64' 'aarch64')
