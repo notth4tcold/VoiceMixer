@@ -128,7 +128,11 @@ impl ksni::Tray for Tray {
         for px in data.chunks_exact_mut(4) {
             px.rotate_right(1); // RGBA -> ARGB
         }
-        vec![ksni::Icon { width: icon.width as i32, height: icon.height as i32, data }]
+        vec![ksni::Icon {
+            width: icon.width as i32,
+            height: icon.height as i32,
+            data,
+        }]
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {
