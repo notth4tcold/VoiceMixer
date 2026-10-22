@@ -7,6 +7,7 @@ mod gui;
 mod midi;
 mod remote;
 mod tape;
+mod tray;
 mod vban_net;
 
 use crossbeam_channel::Receiver;
@@ -19,12 +20,16 @@ const HELP: &str = "\
 VoiceMixer - virtual audio mixing console
 
 USAGE:
-    voicemixer [--headless] [--config FILE] [--import-banana FILE]
+    voicemixer [--headless | --tray] [--config FILE] [--import-banana FILE]
     voicemixer ctl <script>          e.g. voicemixer ctl 'Strip[0].Gain = -6'
     voicemixer ctl get <parameter>   e.g. voicemixer ctl get Bus[0].Mute
 
 OPTIONS:
     --headless             Run without a window (control with `voicemixer ctl`)
+    --tray                 Start minimised to the system tray
+
+Closing the window keeps VoiceMixer running in the system tray; quit from
+the tray menu or Menu > Quit. Starting `voicemixer` again shows the window.
     --config FILE          Settings file (default: ~/.config/voicemixer/settings.toml)
     --import-banana FILE   Import a Voicemeeter Banana settings XML at start-up
 
@@ -53,6 +58,7 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     let headless = args.iter().any(|a| a == "--headless");
+    let start_in_tray = args.iter().any(|a| a == "--tray");
     let config_path = arg_value(&args, "--config")
         .map(PathBuf::from)
         .unwrap_or_else(config::default_path);
@@ -61,7 +67,7 @@ fn main() -> anyhow::Result<()> {
         params = banana::import_file(Path::new(&xml), params)?;
         log::info!("imported Voicemeeter settings from {xml}");
     }
-    run(params, config_path, headless)
+    run(params, config_path, headless, start_in_tray)
 }
 
 fn arg_value(args: &[String], name: &str) -> Option<String> {
@@ -71,14 +77,27 @@ fn arg_value(args: &[String], name: &str) -> Option<String> {
         .cloned()
 }
 
-fn run(params: MixerParams, config_path: PathBuf, headless: bool) -> anyhow::Result<()> {
+fn run(
+    params: MixerParams,
+    config_path: PathBuf,
+    headless: bool,
+    start_in_tray: bool,
+) -> anyhow::Result<()> {
+    // Launched again (say, from the app menu) while already running in the
+    // tray: bring the existing window back instead of failing.
+    if !headless && remote::show_running() {
+        log::info!("VoiceMixer is already running; showing its window");
+        return Ok(());
+    }
+
     let rate = params.settings.sample_rate;
     let shared = Arc::new(Shared::new(params));
     let (action_tx, action_rx) = crossbeam_channel::unbounded();
     let ctl = Controller::new(shared.clone(), action_tx);
+    let window = (!headless).then(tray::WindowControl::new);
 
     // First, so a second instance stops here instead of fighting over devices.
-    remote::start(ctl.clone())?;
+    remote::start(ctl.clone(), window.clone())?;
 
     let frames = rate as usize;
     let (rec_tx, rec_rx) = rtrb::RingBuffer::new(frames * 2 * 2);
@@ -137,13 +156,28 @@ fn run(params: MixerParams, config_path: PathBuf, headless: bool) -> anyhow::Res
             })?;
     }
 
-    if headless {
+    let Some(window) = window else {
         log::info!("running headless; control with `voicemixer ctl` (Ctrl+C to quit)");
         loop {
             std::thread::park();
         }
+    };
+    let mut gui = gui::Gui::new()?;
+    let in_tray = tray::start(&window);
+    let mut show = !(start_in_tray && in_tray);
+    loop {
+        if show {
+            gui.run(ctl.clone(), &window)?;
+        }
+        // Closed with no tray to fall back to: that was a quit.
+        if window.quitting() || !window.in_tray() {
+            break;
+        }
+        show = window.wait() == tray::Request::Show;
+        if !show {
+            break;
+        }
     }
-    gui::run(ctl)?;
     config::save(&config_path, &shared.snapshot())?;
     Ok(())
 }

@@ -12,21 +12,64 @@ use std::time::Duration;
 use voicemixer_core::*;
 use widgets::color;
 
-pub fn run(ctl: Controller) -> anyhow::Result<()> {
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("VoiceMixer")
-            .with_app_id("voicemixer")
-            .with_inner_size([1240.0, 690.0])
-            .with_min_inner_size([1040.0, 600.0]),
-        ..Default::default()
-    };
-    eframe::run_native(
-        "VoiceMixer",
-        options,
-        Box::new(move |cc| Ok(Box::new(App::new(cc, ctl)))),
-    )
-    .map_err(|e| anyhow::anyhow!("GUI: {e}"))
+use crate::tray::{Request, WindowControl};
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::platform::run_on_demand::EventLoopExtRunOnDemand;
+use winit::window::WindowId;
+
+/// The window. winit allows one event loop per process, so it outlives each
+/// window and is reused whenever the window comes back from the tray.
+pub struct Gui {
+    event_loop: EventLoop<eframe::UserEvent>,
+}
+
+impl Gui {
+    pub fn new() -> anyhow::Result<Self> {
+        let event_loop = EventLoop::with_user_event().build()?;
+        Ok(Self { event_loop })
+    }
+
+    /// Shows the window until it is closed. Closing does not stop the
+    /// audio; `main` decides whether that was a quit or a hide to the tray.
+    pub fn run(&mut self, ctl: Controller, window: &WindowControl) -> anyhow::Result<()> {
+        let options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_title("VoiceMixer")
+                .with_app_id("voicemixer")
+                .with_inner_size([1240.0, 690.0])
+                .with_min_inner_size([1040.0, 600.0]),
+            ..Default::default()
+        };
+        let win = window.clone();
+        let mut app = eframe::create_native(
+            "VoiceMixer",
+            options,
+            Box::new(move |cc| Ok(Box::new(App::new(cc, ctl, win)))),
+            &self.event_loop,
+        );
+        let result = self.event_loop.run_app_on_demand(&mut app);
+        window.attach(None);
+        drop(app);
+        // Dropping a window only flags it; winit destroys it on its next
+        // loop iteration. Without one, the closed window would stay on
+        // screen (Wayland) while VoiceMixer sits in the tray.
+        self.event_loop.run_app_on_demand(&mut OneIteration)?;
+        result.map_err(|e| anyhow::anyhow!("GUI: {e}"))
+    }
+}
+
+struct OneIteration;
+
+impl ApplicationHandler<eframe::UserEvent> for OneIteration {
+    fn resumed(&mut self, _: &ActiveEventLoop) {}
+
+    fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, _: WindowEvent) {}
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        event_loop.exit();
+    }
 }
 
 #[derive(Default)]
@@ -137,12 +180,14 @@ fn home_dir() -> PathBuf {
 
 struct App {
     ctl: Controller,
+    window: WindowControl,
     meters: MeterState,
     ui: UiState,
 }
 
 impl App {
-    fn new(cc: &eframe::CreationContext<'_>, ctl: Controller) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, ctl: Controller, window: WindowControl) -> Self {
+        window.attach(Some(cc.egui_ctx.clone()));
         let mut visuals = egui::Visuals::dark();
         visuals.panel_fill = color::BG;
         visuals.window_fill = color::PANEL;
@@ -156,6 +201,7 @@ impl App {
         });
         Self {
             ctl,
+            window,
             meters: MeterState::default(),
             ui: UiState::default(),
         }
@@ -165,6 +211,14 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(33));
+        while let Some(r) = self.window.try_recv() {
+            match r {
+                // Raises (and un-minimises) the window where the compositor
+                // allows it; Wayland may only flash it in the taskbar.
+                Request::Show => ctx.send_viewport_cmd(egui::ViewportCommand::Focus),
+                Request::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            }
+        }
         let shared = self.ctl.shared.clone();
         self.meters.update(&shared.meters);
         self.ui.last_help = self.ui.hover_help.take();
@@ -177,17 +231,17 @@ impl eframe::App for App {
         let before = p.clone();
 
         egui::TopBottomPanel::top("top")
-            .frame(egui::Frame::none().fill(color::PANEL).inner_margin(6.0))
+            .frame(egui::Frame::NONE.fill(color::PANEL).inner_margin(6.0))
             .show(ctx, |ui| {
                 self.top_bar(ui, &mut p);
             });
         egui::TopBottomPanel::bottom("status")
-            .frame(egui::Frame::none().fill(color::PANEL).inner_margin(4.0))
+            .frame(egui::Frame::NONE.fill(color::PANEL).inner_margin(4.0))
             .show(ctx, |ui| {
                 self.status_bar(ui);
             });
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(color::BG).inner_margin(8.0))
+            .frame(egui::Frame::NONE.fill(color::BG).inner_margin(8.0))
             .show(ctx, |ui| {
                 egui::ScrollArea::both()
                     .auto_shrink([false, false])
@@ -255,43 +309,56 @@ impl App {
             ui.menu_button(RichText::new("Menu").strong(), |ui| {
                 if ui.button("Save preset…").clicked() {
                     self.ui.open_path(PathKind::SavePreset);
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Load preset…").clicked() {
                     self.ui.open_path(PathKind::LoadPreset);
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Import Voicemeeter settings (XML)…").clicked() {
                     self.ui.open_path(PathKind::ImportBanana);
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 if ui.button("Reconnect audio devices").clicked() {
                     self.ui.pending.push(Action::ReconnectDevices);
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Reset all settings").clicked() {
                     self.ui.pending.push(Action::Reset);
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 if ui.button("Composite patch…").clicked() {
                     self.ui.show_patch = true;
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("MIDI mapping…").clicked() {
                     self.ui.show_midi = true;
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Engine settings…").clicked() {
                     self.ui.show_settings = true;
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.checkbox(&mut p.gui_locked, "Lock controls");
                 ui.separator();
                 if ui.button("Help / About").clicked() {
                     self.ui.show_about = true;
-                    ui.close_menu();
+                    ui.close();
+                }
+                ui.separator();
+                if self.window.in_tray() {
+                    let r = ui.button("Hide to tray");
+                    self.ui.help(&r, "Close the window; audio keeps running. Click the tray icon to bring it back.");
+                    if r.clicked() {
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                        ui.close();
+                    }
+                }
+                if ui.button("Quit").clicked() {
+                    self.window.request(Request::Quit);
+                    ui.close();
                 }
             });
             let vban_on = p.vban.enabled;

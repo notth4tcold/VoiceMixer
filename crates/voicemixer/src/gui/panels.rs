@@ -10,9 +10,9 @@ use voicemixer_core::*;
 const STRIP_W: f32 = 128.0;
 
 fn panel_frame(accent: Color32) -> egui::Frame {
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(color::PANEL)
-        .rounding(6.0)
+        .corner_radius(6.0)
         .inner_margin(6.0)
         .stroke(egui::Stroke::new(1.0_f32, accent.gamma_multiply(0.35)))
 }
@@ -112,15 +112,15 @@ pub fn strip(
                     fr.fader.context_menu(|ui| {
                         if ui.button("Reset to 0 dB").clicked() {
                             s.gain_db = 0.0;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui.button("Remove limiter").clicked() {
                             s.limit_db = LIMIT_OFF_DB;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui.button("MIDI learn: gain").clicked() {
                             st.midi_learn(format!("Strip[{i}].Gain"));
-                            ui.close_menu();
+                            ui.close();
                         }
                     });
                 });
@@ -137,7 +137,7 @@ pub fn strip(
                     r.context_menu(|ui| {
                         if ui.button("MIDI learn: mute").clicked() {
                             st.midi_learn(format!("Strip[{i}].Mute"));
-                            ui.close_menu();
+                            ui.close();
                         }
                     });
                 });
@@ -283,7 +283,7 @@ fn strip_menu(ui: &mut egui::Ui, i: usize, s: &mut StripParams, st: &mut UiState
     ui.separator();
     if ui.button("Copy strip settings").clicked() {
         st.clipboard = Some(s.clone());
-        ui.close_menu();
+        ui.close();
     }
     let can_paste = st.clipboard.is_some();
     if ui
@@ -296,7 +296,7 @@ fn strip_menu(ui: &mut egui::Ui, i: usize, s: &mut StripParams, st: &mut UiState
             s.label = label;
             s.device = device;
         }
-        ui.close_menu();
+        ui.close();
     }
     if ui.button("Reset strip").clicked() {
         let (label, device) = (s.label.clone(), s.device.clone());
@@ -305,11 +305,11 @@ fn strip_menu(ui: &mut egui::Ui, i: usize, s: &mut StripParams, st: &mut UiState
             device,
             ..Default::default()
         };
-        ui.close_menu();
+        ui.close();
     }
     if !is_virtual_strip(i) && ui.button("Compressor / gate settings…").clicked() {
         st.dyn_strip = Some(i);
-        ui.close_menu();
+        ui.close();
     }
 }
 
@@ -519,15 +519,15 @@ fn bus_row(
             ui.text_edit_singleline(&mut bus.label);
             if ui.button("Parametric EQ…").clicked() {
                 st.eq_bus = Some(b);
-                ui.close_menu();
+                ui.close();
             }
             if ui.button("MIDI learn: gain").clicked() {
                 st.midi_learn(format!("Bus[{b}].Gain"));
-                ui.close_menu();
+                ui.close();
             }
             if ui.button("MIDI learn: mute").clicked() {
                 st.midi_learn(format!("Bus[{b}].Mute"));
-                ui.close_menu();
+                ui.close();
             }
         });
         let mode_resp = ui.menu_button(
@@ -536,7 +536,7 @@ fn bus_row(
                 for m in BusMode::ALL {
                     if ui.selectable_label(bus.mode == m, m.label()).clicked() {
                         bus.mode = m;
-                        ui.close_menu();
+                        ui.close();
                     }
                 }
             },

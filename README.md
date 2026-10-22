@@ -81,6 +81,18 @@ Para importar um setup do Windows, copie `Documents\Voicemeeter\VoicemeeterBanan
 e use **Menu → Import Voicemeeter settings**, ou `voicemixer --import-banana arquivo.xml`.
 Os dispositivos não são importados (os nomes do Windows não existem no Linux).
 
+## Bandeja do sistema
+
+Fechar a janela não para o áudio: o VoiceMixer continua rodando com um ícone na
+bandeja do sistema. Clique no ícone (ou rode `voicemixer` de novo, por exemplo pelo
+menu de aplicativos) para reabrir a janela; para encerrar de vez use **Quit** no menu
+do ícone ou **Menu → Quit**. `voicemixer --tray` já inicia minimizado na bandeja
+(útil para iniciar junto com a sessão).
+
+O ícone usa o protocolo StatusNotifierItem: funciona no KDE, Waybar, XFCE e afins; no
+GNOME precisa da extensão *AppIndicator and KStatusNotifierItem Support*. Sem bandeja
+disponível, fechar a janela encerra o programa como antes.
+
 ## Controle remoto e scripts
 
 ```sh
@@ -89,6 +101,7 @@ voicemixer ctl 'Bus[0].Gain += 3'
 voicemixer ctl get Strip[0].Mute
 voicemixer ctl levels            # picos em dB: 5 faixas e 5 buses
 voicemixer --headless            # sem janela, só controle remoto
+voicemixer ctl show              # reabre a janela que está na bandeja
 ```
 
 O socket fica em `$XDG_RUNTIME_DIR/voicemixer.sock` (uma linha por comando; resposta `OK …` ou `ERR …`).

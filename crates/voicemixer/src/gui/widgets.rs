@@ -433,10 +433,10 @@ pub fn pad(
 pub fn chip(ui: &mut Ui, text: &str, on: bool, on_color: Color32) -> Response {
     let fill = if on { on_color } else { color::OFF };
     let fg = if on { Color32::BLACK } else { color::DIM };
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(fill)
-        .rounding(3.0)
-        .inner_margin(egui::Margin::symmetric(6.0, 2.0))
+        .corner_radius(3.0)
+        .inner_margin(egui::Margin::symmetric(6, 2))
         .show(ui, |ui| {
             ui.label(egui::RichText::new(text).color(fg).size(10.5).strong())
         })

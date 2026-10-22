@@ -4,6 +4,7 @@
 //! Strip[0].Gain = -6; Bus[3].Mute = 1     -> OK
 //! get Strip[0].Gain                        -> OK -6
 //! levels                                   -> OK <strip and bus peaks in dB>
+//! show                                     -> OK (opens the window from the tray)
 //! ```
 //!
 //! Linux: Unix socket `$XDG_RUNTIME_DIR/voicemixer.sock`. Other systems:
@@ -12,6 +13,8 @@
 use std::io::{BufRead, BufReader, Write};
 use std::sync::atomic::Ordering;
 use voicemixer_core::{dsp, Controller, NUM_BUSES, NUM_STRIPS};
+
+use crate::tray::{Request, WindowControl};
 
 #[cfg(unix)]
 pub fn socket_path() -> std::path::PathBuf {
@@ -24,7 +27,7 @@ pub fn socket_path() -> std::path::PathBuf {
 #[cfg(not(unix))]
 const TCP_ADDR: &str = "127.0.0.1:47650";
 
-pub fn start(ctl: Controller) -> anyhow::Result<()> {
+pub fn start(ctl: Controller, window: Option<WindowControl>) -> anyhow::Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::net::UnixListener;
@@ -39,9 +42,10 @@ pub fn start(ctl: Controller) -> anyhow::Result<()> {
             .spawn(move || {
                 for stream in listener.incoming().flatten() {
                     let ctl = ctl.clone();
+                    let window = window.clone();
                     std::thread::spawn(move || {
                         if let Ok(reader) = stream.try_clone() {
-                            serve(&ctl, BufReader::new(reader), stream);
+                            serve(&ctl, window.as_ref(), BufReader::new(reader), stream);
                         }
                     });
                 }
@@ -55,9 +59,10 @@ pub fn start(ctl: Controller) -> anyhow::Result<()> {
             .spawn(move || {
                 for stream in listener.incoming().flatten() {
                     let ctl = ctl.clone();
+                    let window = window.clone();
                     std::thread::spawn(move || {
                         if let Ok(reader) = stream.try_clone() {
-                            serve(&ctl, BufReader::new(reader), stream);
+                            serve(&ctl, window.as_ref(), BufReader::new(reader), stream);
                         }
                     });
                 }
@@ -66,12 +71,17 @@ pub fn start(ctl: Controller) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn serve(ctl: &Controller, reader: impl BufRead, mut writer: impl Write) {
+fn serve(
+    ctl: &Controller,
+    window: Option<&WindowControl>,
+    reader: impl BufRead,
+    mut writer: impl Write,
+) {
     let clients = &ctl.shared.status.remote_clients;
     clients.fetch_add(1, Ordering::Relaxed);
     for line in reader.lines() {
         let Ok(line) = line else { break };
-        let reply = answer(ctl, line.trim());
+        let reply = answer(ctl, window, line.trim());
         if writeln!(writer, "{reply}")
             .and_then(|_| writer.flush())
             .is_err()
@@ -82,9 +92,18 @@ fn serve(ctl: &Controller, reader: impl BufRead, mut writer: impl Write) {
     clients.fetch_sub(1, Ordering::Relaxed);
 }
 
-fn answer(ctl: &Controller, line: &str) -> String {
+fn answer(ctl: &Controller, window: Option<&WindowControl>, line: &str) -> String {
     if line.is_empty() || line.eq_ignore_ascii_case("ping") {
         return "OK pong".into();
+    }
+    if line.eq_ignore_ascii_case("show") {
+        return match window {
+            Some(w) => {
+                w.request(Request::Show);
+                "OK".into()
+            }
+            None => "ERR running headless, there is no window to show".into(),
+        };
     }
     if let Some(path) = line
         .strip_prefix("get ")
@@ -116,6 +135,12 @@ fn answer(ctl: &Controller, line: &str) -> String {
     }
 }
 
+/// Asks an already running VoiceMixer to show its window. False if none is
+/// running (or it is headless).
+pub fn show_running() -> bool {
+    matches!(send("show"), Ok(reply) if reply.starts_with("OK"))
+}
+
 /// `voicemixer ctl <script>` / `voicemixer ctl get <param>`.
 pub fn client(args: &[String]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -123,7 +148,21 @@ pub fn client(args: &[String]) -> anyhow::Result<()> {
             "usage: voicemixer ctl 'Strip[0].Gain = -6'  |  voicemixer ctl get Strip[0].Gain"
         );
     }
-    let line = args.join(" ");
+    let reply = send(&args.join(" "))?;
+    match reply.strip_prefix("ERR ") {
+        Some(e) => anyhow::bail!("{e}"),
+        None => {
+            let value = reply.strip_prefix("OK").unwrap_or(&reply).trim();
+            if !value.is_empty() && value != "pong" {
+                println!("{value}");
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Sends one command line to the running instance and returns its reply.
+fn send(line: &str) -> anyhow::Result<String> {
     #[cfg(unix)]
     let stream = std::os::unix::net::UnixStream::connect(socket_path()).map_err(|e| {
         anyhow::anyhow!(
@@ -139,15 +178,5 @@ pub fn client(args: &[String]) -> anyhow::Result<()> {
     writer.flush()?;
     let mut reply = String::new();
     BufReader::new(stream).read_line(&mut reply)?;
-    let reply = reply.trim_end();
-    match reply.strip_prefix("ERR ") {
-        Some(e) => anyhow::bail!("{e}"),
-        None => {
-            let value = reply.strip_prefix("OK").unwrap_or(reply).trim();
-            if !value.is_empty() && value != "pong" {
-                println!("{value}");
-            }
-            Ok(())
-        }
-    }
+    Ok(reply.trim_end().to_string())
 }
